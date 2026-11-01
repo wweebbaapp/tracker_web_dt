@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12151c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e1116'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%234ea1ff' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%234ea1ff'/%3E%3C/svg%3E">
+  <title>Tracker Web DT — analisi, simulazioni, sistemi di riferimento</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">◎</span> Tracker&nbsp;Web&nbsp;DT <span class="ver">v6 bis</span></div>
+    <div class="actions">
+      <button id="btnOpenVideo" class="btn primary" title="Carica un video">Apri video</button>
+      <button id="btnOpenProject" class="btn" title="Carica un progetto .json">Apri progetto</button>
+      <button id="btnSaveProject" class="btn" title="Scarica il progetto .json">Salva</button>
+      <button id="btnExport" class="btn" title="Esporta tutti i dati in CSV">CSV</button>
+      <button id="btnNew" class="btn ghost" title="Nuovo progetto">Nuovo</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage-wrap">
+      <div id="stage" class="stage" data-mode="track">
+        <video id="video" playsinline preload="auto"></video>
+        <canvas id="overlay"></canvas>
+        <div id="dropHint" class="drop-hint">
+          <div class="drop-icon" aria-hidden="true">🎬</div>
+          <p>Trascina un video qui</p>
+          <p class="muted">oppure premi “Apri video”</p>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="btnPrev" class="icon" title="Frame precedente (←)">⏮</button>
+        <button id="btnPlay" class="icon play" title="Play / Pausa (spazio)">▶</button>
+        <button id="btnNext" class="icon" title="Frame successivo (→)">⏭</button>
+        <label class="speed" title="Velocità di riproduzione: i valori negativi rallentano, quelli positivi velocizzano">Velocità
+          <select id="playSpeed" aria-label="Velocità di riproduzione">
+            <option value="-4">−4× (¼)</option>
+            <option value="-3">−3× (⅓)</option>
+            <option value="-2">−2× (½)</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="3">3×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <input id="seek" class="seek" type="range" min="0" max="0" value="0" step="1" aria-label="Posizione">
+        <span id="timeLabel" class="time">– / –</span>
+        <label class="fps" title="Frame per secondo (rilevati automaticamente)">FPS
+          <input id="fps" type="number" min="1" max="300" step="any" value="30" inputmode="decimal">
+        </label>
+        <span id="fpsBadge" class="badge" title="Origine del valore FPS">auto…</span>
+        <span id="frameSeconds" class="frame-seconds" title="Tempo del frame corrente e durata di un frame">– s</span>
+      </div>
+      <div class="transport-range">
+        <span class="transport-range-label">Intervallo</span>
+        <div id="transportRange" class="range-track transport-track" aria-label="Intervallo di analisi">
+          <div id="transportRangeFill" class="range-fill"></div>
+          <div id="transportRangeStart" class="range-handle start" title="Inizio intervallo"></div>
+          <div id="transportRangeEnd" class="range-handle end" title="Fine intervallo"></div>
+        </div>
+        <span id="transportRangeTimes" class="transport-range-times">–</span>
+      </div>
+
+    </section>
+
+    <aside class="sidebar">
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="range" role="tab">Intervallo</button>
+        <button class="tab" data-tab="calib" role="tab">Calibra</button>
+        <button class="tab" data-tab="axes" role="tab">Assi</button>
+        <button class="tab" data-tab="track" role="tab">Traccia</button>
+        <button class="tab" data-tab="analysis" role="tab">Analisi</button>
+        <button class="tab" data-tab="simula" role="tab">Simula</button>
+      </nav>
+
+      <div class="tab-panel active" id="panel-range" role="tabpanel">
+      <div class="range-card">
+        <div class="range-head">
+          <div class="range-title">Intervallo di analisi <span id="rangeLabel" class="muted">–</span></div>
+          <div class="range-actions">
+            <button id="btnAutoRange" class="btn small primary" title="Rileva quando il corpo compare e quando scompare">Rileva intervallo</button>
+            <button id="btnResetRange" class="btn small ghost" title="Riporta l'intervallo a tutto il video">Reset</button>
+          </div>
+        </div>
+        <div id="rangeTrack" class="range-track" aria-label="Intervallo">
+          <div id="rangeFill" class="range-fill"></div>
+          <div id="rangeStartHandle" class="range-handle start" title="Inizio"></div>
+          <div id="rangeEndHandle" class="range-handle end" title="Fine"></div>
+        </div>
+        <div class="range-inputs">
+          <label>Inizio <input id="rangeStart" type="number" min="0" step="1"></label>
+          <label>Fine <input id="rangeEnd" type="number" min="0" step="1"></label>
+          <span id="rangeTimes" class="muted"></span>
+        </div>
+        <div id="autoRangeStatus" class="hint">Il rilevamento automatico cerca l'apparizione e la scomparsa del corpo.</div>
+        <div class="range-playback">
+          <button id="btnRangePrev" class="icon" title="Frame precedente nell'intervallo">⏮</button>
+          <button id="btnRangePlay" class="icon play" title="Riproduci solo l'intervallo selezionato">▶</button>
+          <button id="btnRangeNext" class="icon" title="Frame successivo nell'intervallo">⏭</button>
+          <span id="rangeFrameLabel" class="range-frame-label">Frame – / –</span>
+        </div>
+        <div class="row">
+          <button id="btnConfirmRange" class="btn primary">Conferma e vai a Calibra</button>
+        </div>
+      </div>
+      </div>
+
+      <div class="tab-panel" id="panel-track" role="tabpanel">
+        <div class="card">
+          <div class="card-title">Punti</div>
+          <ul id="particleList" class="particle-list"></ul>
+          <div class="row">
+            <button id="btnAddParticle" class="btn small">+ Aggiungi punto</button>
+          </div>
+          <label class="check"><input type="checkbox" id="chkAutoAdvance" checked> Avanza al frame successivo dopo ogni clic</label>
+          <div class="row track-actions">
+            <button id="btnMoto" class="btn primary" title="Cattura un punto per frame e avanza">Moto</button>
+            <button id="btnAutoTrack" class="btn" title="Traccia automaticamente dal punto marcato nel frame corrente">Auto traccia</button>
+          </div>
+          <label class="field">Velocità delle procedure automatiche
+            <select id="autoSpeed" class="select" title="Rallenta il tracciamento automatico e il rilevamento dell'intervallo così da vedere cosa succede">
+              <option value="0">Istantaneo</option>
+              <option value="15">Rapido (15 ms/frame)</option>
+              <option value="40">Normale (40 ms/frame)</option>
+              <option value="90" selected>Lento (90 ms/frame)</option>
+              <option value="180">Molto lento (180 ms/frame)</option>
+            </select>
+          </label>
+          <p class="hint">La stessa velocità vale anche per <b>Rileva intervallo</b> nella scheda Intervallo. Il default è <b>Lento</b>: vedi il punto avanzare frame per frame e puoi annullare dal pannello di avanzamento.</p>
+          <p class="hint">Clicca sul video: il punto viene salvato nel frame corrente e, se l'avanzamento automatico è attivo, il cursore passa subito al frame successivo fino alla fine dell'intervallo. Con <b>Moto</b> l'avanzamento è sempre attivo.</p>
+          <p class="hint">Per <b>Auto traccia</b>: vai su un frame in cui il corpo è visibile, cliccalo, poi premi Auto traccia. Il tracciamento parte da quel frame. Con <b>Lento</b> vedi il punto avanzare frame per frame.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Vista</div>
+          <label class="check"><input type="checkbox" id="chkTrail" checked> Scia</label>
+          <label class="check"><input type="checkbox" id="chkAxes" checked> Assi</label>
+          <label class="check"><input type="checkbox" id="chkLabels" checked> Etichette</label>
+        </div>
+        <div class="card">
+          <div class="card-title">Intervallo</div>
+          <p class="hint">Il tracciamento e l'analisi usano solo i frame dentro l'intervallo selezionato. <b>Rileva intervallo</b> cerca il movimento, non il corpo: se il corpo non è visibile all'inizio, correggi il cursore o parti da un frame successivo.</p>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-calib" role="tabpanel">
+        <div class="card">
+          <div class="card-title">Calibrazione (bordo oggetto)</div>
+          <div id="calibStatus" class="muted">Non calibrato</div>
+          <div class="row">
+            <button id="btnCalibReset" class="btn small">Reimposta</button>
+          </div>
+          <p class="hint">
+            Con <b>Calibra</b>: clicca i due estremi del bordo di un oggetto (anche nel primo frame),
+            poi inserisci la misura reale. La scala è in metri per pixel.
+          </p>
+          <label class="check"><input type="checkbox" id="chkSnap" checked> Aggancia al bordo più vicino</label>
+          <label class="field">Oggetto di riferimento
+            <select id="calibPreset" class="select">
+              <option value="">Personalizzato…</option>
+              <option value="0.297">Foglio A4 — lato lungo (0,297 m)</option>
+              <option value="0.210">Foglio A4 — lato corto (0,210 m)</option>
+              <option value="0.02575">Moneta 2 € — diametro (0,02575 m)</option>
+              <option value="0.02325">Moneta 1 € — diametro (0,02325 m)</option>
+              <option value="0.030">Righello 30 cm (0,30 m)</option>
+              <option value="0.120">Banconota 5 € — lato corto (0,120 m)</option>
+              <option value="0.140">Penna (≈ 0,14 m)</option>
+            </select>
+          </label>
+          <p class="hint">Il riconoscimento automatico dell'oggetto non è disponibile offline: scegli un preset o inserisci la misura.</p>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-axes" role="tabpanel">
+        <div class="card">
+          <div class="card-title">Sistema di riferimento</div>
+          <div id="axesStatus" class="muted">Origine non impostata</div>
+          <div class="axes-grid">
+            <label>X (px)<input id="axesX" type="number" step="1" min="0"></label>
+            <label>Y (px)<input id="axesY" type="number" step="1" min="0"></label>
+            <label>Angolo (°)<input id="axesAngle" type="number" step="0.1"></label>
+          </div>
+          <div class="row">
+            <button id="btnAxesApply" class="btn small primary">Applica</button>
+            <button id="btnAxesPick" class="btn small">Posiziona col mouse</button>
+            <button id="btnAxesAuto" class="btn small">Auto</button>
+          </div>
+          <p class="hint">
+            In modalità <b>Assi</b> clicca un pixel per l'origine (resta dentro il fotogramma),
+            poi trascina per ruotare l'asse x. Puoi anche usare i campi numerici.
+          </p>
+          <p class="hint">Auto: origine sul corpo tracciato e asse x parallelo al moto; se il moto è verticale l'asse y è già parallelo e non ruota.</p>
+        </div>
+      </div>
+
+      <div class="tab-panel analysis" id="panel-analysis" role="tabpanel">
+        <div class="analysis-top">
+          <span id="dataParticleName" class="muted">Nessun punto</span>
+          <div class="analysis-tools">
+            <button id="btnInterpola" class="btn small" title="Rende i grafici più lisci e uniformi, utili per riconoscere il tipo di moto">Interpola</button>
+            <button id="btnExportPDF" class="btn small primary" title="Esporta dati e grafici in PDF">PDF</button>
+          </div>
+        </div>
+        <p id="timingInfo" class="timing-info">–</p>
+        <p class="hint analysis-edit-hint">Le celle dei dati sono modificabili: clicca su un valore, correggilo e premi Invio. <b>Ripristina</b> rimette i valori originali.</p>
+        <div class="analysis-card">
+          <div class="analysis-head">
+            <span>Spazio–tempo</span>
+            <div class="analysis-tools">
+              <select id="stAxisMode" class="select small" title="Scegli se il tempo va sull'asse delle ascisse o delle ordinate">
+                <option value="t-x">tempo in ascisse</option>
+                <option value="t-y">tempo in ordinate</option>
+              </select>
+              <button id="btnResetST" class="btn small ghost" title="Ripristina i valori originali di x e y">Ripristina</button>
+              <button id="btnExportST" class="btn small ghost">CSV</button>
+            </div>
+          </div>
+          <canvas id="graphST" width="680" height="300"></canvas>
+          <div class="mini-table-scroll">
+            <table id="tableST">
+              <thead><tr><th>frame</th><th>t (s)</th><th>x (m)</th><th>y (m)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="analysis-card">
+          <div class="analysis-head">
+            <span>Velocità–tempo</span>
+            <div class="analysis-tools">
+              <button id="btnResetVT" class="btn small ghost" title="Ripristina i valori originali di vx e vy">Ripristina</button>
+              <button id="btnExportVT" class="btn small ghost">CSV</button>
+            </div>
+          </div>
+          <canvas id="graphVT" width="680" height="300"></canvas>
+          <div class="mini-table-scroll">
+            <table id="tableVT">
+              <thead><tr><th>frame</th><th>t (s)</th><th>vx (m/s)</th><th>vy (m/s)</th><th>|v|</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="analysis-card">
+          <div class="analysis-head">
+            <span>Energia</span>
+            <div class="analysis-tools">
+              <button id="btnResetEN" class="btn small ghost" title="Ripristina i valori originali di KE e PE">Ripristina</button>
+              <button id="btnExportEN" class="btn small ghost">CSV</button>
+            </div>
+          </div>
+          <div class="axes-grid energy-controls">
+            <label>Massa (kg)<input id="mass" type="number" min="0.001" step="any" value="1"></label>
+            <label>g (m/s²)<input id="gravity" type="number" step="any" value="9.81"></label>
+          </div>
+          <canvas id="graphEN" width="680" height="300"></canvas>
+          <div class="mini-table-scroll">
+            <table id="tableEN">
+              <thead><tr><th>frame</th><th>t (s)</th><th>KE (J)</th><th>PE (J)</th><th>E (J)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="energyHint" class="hint"></p>
+        </div>
+        <p id="analysisHint" class="hint"></p>
+      </div>
+
+      <div class="tab-panel" id="panel-simula" role="tabpanel">
+        <div class="card">
+          <div class="card-title">Corpo 1</div>
+          <label class="field">Tipo di moto
+            <select id="simType" class="select">
+              <option value="mru">Rettilineo uniforme (MRU)</option>
+              <option value="mrua">Rettilineo uniformemente accelerato</option>
+              <option value="fall">Caduta libera</option>
+              <option value="projectile">Parabolico (proiettile)</option>
+              <option value="circular">Circolare uniforme</option>
+              <option value="harmonic">Armonico (molla)</option>
+              <option value="custom">Personalizzato (componenti x, y)</option>
+            </select>
+          </label>
+          <label class="field">Sistema di riferimento del corpo
+            <select id="simFrameRef" class="select">
+              <option value="primary">Principale (S1)</option>
+              <option value="secondary">Secondario (S2)</option>
+            </select>
+          </label>
+          <div class="axes-grid sim-grid">
+            <label data-sim="x0"><span id="simX0Label">x₀ (m)</span><input id="simX0" type="number" step="any" value="0"></label>
+            <label data-sim="y0"><span id="simY0Label">y₀ (m)</span><input id="simY0" type="number" step="any" value="0"></label>
+            <label data-sim="v0">v₀ (m/s)<input id="simV0" type="number" step="any" value="6"></label>
+            <label data-sim="angle">Angolo (°)<input id="simAngle" type="number" step="any" value="45"></label>
+            <label data-sim="vel">vx₀ (m/s)<input id="simVx" type="number" step="any" value="5"></label>
+            <label data-sim="vel">vy₀ (m/s)<input id="simVy" type="number" step="any" value="0"></label>
+            <label data-sim="accel"><span id="simAccelLabel">a (m/s²)</span><input id="simAccel" type="number" step="any" value="2"></label>
+            <label data-sim="accxy">ax (m/s²)<input id="simAx" type="number" step="any" value="0"></label>
+            <label data-sim="accxy">ay (m/s²)<input id="simAy" type="number" step="any" value="0"></label>
+            <label data-sim="force">Massa (kg)<input id="simMass" type="number" step="any" min="0.001" value="1"></label>
+            <label data-sim="force">Fx (N)<input id="simFx" type="number" step="any" value="0"></label>
+            <label data-sim="force">Fy (N)<input id="simFy" type="number" step="any" value="0"></label>
+            <label data-sim="radius">Raggio (m)<input id="simRadius" type="number" step="any" value="1"></label>
+            <label data-sim="period">Periodo (s)<input id="simPeriod" type="number" step="any" value="2"></label>
+            <label data-sim="phase">Fase (°)<input id="simPhase" type="number" step="any" value="0"></label>
+            <label data-sim="amp">Ampiezza (m)<input id="simAmp" type="number" step="any" value="1"></label>
+          </div>
+          <label class="check" data-sim="grav"><input id="simUseG" type="checkbox"> Applica g (9,81 m/s²)</label>
+          <div class="axes-grid sim-grid sim-scene">
+            <label>Durata (s)<input id="simDuration" type="number" step="any" min="0.1" value="2"></label>
+            <label>FPS<input id="simFps" type="number" step="1" min="1" max="240" value="30"></label>
+            <label>Corpo (px)<input id="simBody" type="number" step="1" min="2" max="48" value="10"></label>
+            <label>Rumore (px)<input id="simNoise" type="number" step="any" min="0" value="0"></label>
+            <label>Velocità video
+              <select id="simVideoSpeed" class="select" title="Velocità di riproduzione del file video generato">
+                <option value="0.25">0,25× (molto lento)</option>
+                <option value="0.5">0,5× (lento)</option>
+                <option value="1" selected>1× (normale)</option>
+                <option value="2">2× (veloce)</option>
+                <option value="4">4× (molto veloce)</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">La <b>velocità video</b> controlla la registrazione del file: 0,25× impiega quattro volte il tempo della durata della simulazione e produce un video più lento da osservare.</p>
+          <div class="row">
+            <button id="btnSimGenerate" class="btn primary">Genera simulazione</button>
+            <button id="btnSimDemo" class="btn">Esempio</button>
+            <button id="btnSimVideo" class="btn" title="Registra la scena in un video (MP4 se supportato)">Video simulato</button>
+          </div>
+          <div id="simStatus" class="hint">Imposta i parametri e genera: i punti sono calcolati esattamente, senza video.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Secondo corpo (opzionale)</div>
+          <label class="check"><input type="checkbox" id="simBody2On"> Aggiungi un secondo corpo in movimento</label>
+          <div id="simBody2Box" class="hidden">
+            <label class="field">Tipo di moto
+              <select id="sim2Type" class="select">
+                <option value="mru">Rettilineo uniforme (MRU)</option>
+                <option value="mrua">Rettilineo uniformemente accelerato</option>
+                <option value="fall">Caduta libera</option>
+                <option value="projectile">Parabolico (proiettile)</option>
+                <option value="circular">Circolare uniforme</option>
+                <option value="harmonic">Armonico (molla)</option>
+                <option value="custom">Personalizzato (componenti x, y)</option>
+              </select>
+            </label>
+            <label class="field">Sistema di riferimento del corpo
+              <select id="sim2FrameRef" class="select">
+                <option value="primary">Principale (S1)</option>
+                <option value="secondary">Secondario (S2)</option>
+              </select>
+            </label>
+            <div class="axes-grid sim-grid">
+              <label data-sim2="x0"><span id="sim2X0Label">x₀ (m)</span><input id="sim2X0" type="number" step="any" value="0"></label>
+              <label data-sim2="y0"><span id="sim2Y0Label">y₀ (m)</span><input id="sim2Y0" type="number" step="any" value="1"></label>
+              <label data-sim2="v0">v₀ (m/s)<input id="sim2V0" type="number" step="any" value="4"></label>
+              <label data-sim2="angle">Angolo (°)<input id="sim2Angle" type="number" step="any" value="0"></label>
+              <label data-sim2="vel">vx₀ (m/s)<input id="sim2Vx" type="number" step="any" value="3"></label>
+              <label data-sim2="vel">vy₀ (m/s)<input id="sim2Vy" type="number" step="any" value="0"></label>
+              <label data-sim2="accel"><span id="sim2AccelLabel">a (m/s²)</span><input id="sim2Accel" type="number" step="any" value="-2"></label>
+              <label data-sim2="accxy">ax (m/s²)<input id="sim2Ax" type="number" step="any" value="0"></label>
+              <label data-sim2="accxy">ay (m/s²)<input id="sim2Ay" type="number" step="any" value="0"></label>
+              <label data-sim2="force">Massa (kg)<input id="sim2Mass" type="number" step="any" min="0.001" value="1"></label>
+              <label data-sim2="force">Fx (N)<input id="sim2Fx" type="number" step="any" value="0"></label>
+              <label data-sim2="force">Fy (N)<input id="sim2Fy" type="number" step="any" value="0"></label>
+              <label data-sim2="radius">Raggio (m)<input id="sim2Radius" type="number" step="any" value="1"></label>
+              <label data-sim2="period">Periodo (s)<input id="sim2Period" type="number" step="any" value="2"></label>
+              <label data-sim2="phase">Fase (°)<input id="sim2Phase" type="number" step="any" value="0"></label>
+              <label data-sim2="amp">Ampiezza (m)<input id="sim2Amp" type="number" step="any" value="1"></label>
+            </div>
+            <label class="check" data-sim2="grav"><input id="sim2UseG" type="checkbox"> Applica g (9,81 m/s²)</label>
+            <div class="axes-grid sim-grid sim-scene">
+              <label>Corpo (px)<input id="sim2Body" type="number" step="1" min="2" max="48" value="10"></label>
+              <label>Rumore (px)<input id="sim2Noise" type="number" step="any" min="0" value="0"></label>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Sistema di riferimento principale</div>
+          <label class="field">Tipo di sistema
+            <select id="simFrame" class="select">
+              <option value="lab">Laboratorio (inerziale)</option>
+              <option value="moving">Inerziale in moto rettilineo uniforme</option>
+              <option value="accel">Non inerziale accelerato</option>
+              <option value="rotating">Non inerziale rotante</option>
+            </select>
+          </label>
+          <div class="axes-grid sim-grid">
+            <label data-frame="v">Vx (m/s)<input id="simFrameVx" type="number" step="any" value="1.5"></label>
+            <label data-frame="v">Vy (m/s)<input id="simFrameVy" type="number" step="any" value="0"></label>
+            <label data-frame="a">Ax (m/s²)<input id="simFrameAx" type="number" step="any" value="1"></label>
+            <label data-frame="a">Ay (m/s²)<input id="simFrameAy" type="number" step="any" value="0"></label>
+            <label data-frame="w">ω (rad/s)<input id="simFrameW" type="number" step="any" value="1"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="simShowLab" checked> Mostra gli assi del laboratorio</label>
+          <p class="hint">Il moto è nel piano (x, y). I dati e la scena sono trasformati nel sistema scelto. Un sistema <b>inerziale</b> ha accelerazione nulla ma può avere una velocità; un sistema <b>non inerziale</b> ha accelerazione diversa da zero.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Secondo sistema di riferimento (opzionale)</div>
+          <label class="check"><input type="checkbox" id="simRef2On"> Sovrapponi un secondo sistema di riferimento</label>
+          <div id="simRef2Box" class="hidden">
+            <label class="field">Tipo del secondo sistema
+              <select id="simRef2Type" class="select">
+                <option value="moving">Inerziale in moto rettilineo uniforme</option>
+                <option value="accel">Non inerziale accelerato</option>
+                <option value="rotating">Non inerziale rotante</option>
+                <option value="lab">Laboratorio (inerziale)</option>
+              </select>
+            </label>
+            <div class="axes-grid sim-grid">
+              <label data-ref2="v">Vx (m/s)<input id="simRef2Vx" type="number" step="any" value="2"></label>
+              <label data-ref2="v">Vy (m/s)<input id="simRef2Vy" type="number" step="any" value="0"></label>
+              <label data-ref2="a">Ax (m/s²)<input id="simRef2Ax" type="number" step="any" value="1"></label>
+              <label data-ref2="a">Ay (m/s²)<input id="simRef2Ay" type="number" step="any" value="0"></label>
+              <label data-ref2="w">ω (rad/s)<input id="simRef2W" type="number" step="any" value="1"></label>
+            </div>
+            <p class="hint">Le assi del secondo sistema sono disegnate in sovrimpressione. I dati restano quelli del sistema principale. Assegna ogni corpo al sistema principale o al secondario: il moto viene calcolato nel sistema scelto e poi trasformato per la visualizzazione.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Visualizzazione del moto</div>
+          <label class="field">Mostra i corpi rispetto a
+            <select id="simViewFrame" class="select">
+              <option value="primary">Sistema principale (S1)</option>
+              <option value="secondary">Secondo sistema (S2)</option>
+              <option value="lab">Laboratorio (sistema fisso)</option>
+            </select>
+          </label>
+          <p class="hint">Scegli il sistema di riferimento con cui osservare il moto. Cambiare vista non modifica i parametri: ricalcola solo posizioni, grafici e tabelle nel sistema scelto.</p>
+          <p class="hint">Esempio: un corpo in caduta libera dentro un sistema inerziale in moto orizzontale appare in caduta verticale rispetto a quel sistema, ma rispetto al laboratorio fisso descrive un arco parabolico (come un proiettile sparato orizzontalmente).</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Come funziona</div>
+          <p class="hint">La scena è virtuale: l'app calcola la posizione per ogni frame, imposta scala e assi e crea i marcatori. Grafici, tabelle, CSV, PDF e progetto funzionano come con un video.</p>
+          <p class="hint">Con <b>Rumore = 0</b> i dati coincidono con la teoria; aumenta il rumore per simulare l'errore di misura.</p>
+          <p class="hint">Puoi simulare fino a 2 corpi e 2 sistemi di riferimento. Con il moto <b>personalizzato</b> scegli direttamente le componenti vx₀, vy₀, ax, ay. Le forze producono un'accelerazione <b>F/m</b>; <b>g</b> si aggiunge solo se l'opzione è attiva. Assegna ogni corpo al sistema in cui vuoi definire il suo moto: la scena lo mostra nel sistema di visualizzazione scelto.</p>
+          <p class="hint">Le forze agiscono sui moti traslatori (MRU, MRUA, caduta libera, parabolico, personalizzato). Esempio: un corpo con velocità lungo y e una forza lungo x curva verso x mantenendo la velocità iniziale lungo y: l'effetto è un moto parabolico.</p>
+          <p class="hint">Esempio: caduta libera nel secondo sistema inerziale in moto → nel sistema fisso il corpo descrive un arco parabolico.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <input id="fileVideo" type="file" accept="video/*" hidden>
+  <input id="fileProject" type="file" accept="application/json,.json" hidden>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-box" role="dialog" aria-modal="true">
+      <h3 id="modalTitle">Distanza</h3>
+      <p id="modalDesc" class="muted"></p>
+      <input id="modalInput" type="number" step="any" inputmode="decimal" autocomplete="off">
+      <div class="modal-actions">
+        <button id="modalCancel" class="btn ghost">Annulla</button>
+        <button id="modalOk" class="btn primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="busy" class="busy hidden">
+    <div class="busy-box">
+      <h3 id="busyTitle">Analisi…</h3>
+      <div class="busy-bar"><div id="busyFill"></div></div>
+      <div class="busy-row">
+        <span id="busyPct" class="muted">0%</span>
+        <button id="busyCancel" class="btn small ghost">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <script src="js/vision.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
